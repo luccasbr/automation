@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String             @id @default(nanoid(11))
+  email            String             @unique
+  phone            String             @unique
+  name             String
+  password         String
+  accountScript    String?
+  leads            Lead[]
+  automations      Automation[]
+  scripts          Script[]           @relation("UserScripts")
+  vars             Safevar[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  ScriptPermission ScriptPermission[]
+}
+
+model Lead {
+  phone     String   @id
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String?
+  city      String?
+  state     String?
+  genre     Genre?
+  funnels   Funnel[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LeadPath {
+  id        Int      @id @default(autoincrement())
+  funnelId  String
+  funnel    Funnel   @relation(fields: [funnelId], references: [id])
+  stageName String
+  createdAt DateTime @default(now())
+}
+
+model Funnel {
+  id              String          @id @default(nanoid(11))
+  automationId    String
+  automation      Automation      @relation(fields: [automationId], references: [id])
+  leadPhone       String
+  lead            Lead            @relation(fields: [leadPhone], references: [phone])
+  currentStage    String
+  scriptId        String?
+  scriptLink      ScriptLink?     @relation(fields: [scriptId, automationId], references: [sourceScriptId, automationId])
+  scriptHash      String?
+  scriptArgs      Json?
+  scriptVersion   Int?
+  preScriptExecId String?
+  tags            FunnelTag[]
+  messages        Message[]
+  stagesMetadata  StageMetadata[]
+  leadPath        LeadPath[]
+  status          FunnelStatus    @default(CREATED)
+  test            Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model FunnelTag {
+  id       Int    @id @default(autoincrement())
+  funnelId String
+  funnel   Funnel @relation(fields: [funnelId], references: [id])
+  name     String
+}
+
+enum FunnelStatus {
+  CREATED
+  BROKEN
+  AWAITING
+  EXECUTING
+  COMPLETED
+  PAUSED
+  CANCELED
+}
+
+model Automation {
+  id          String       @id @default(nanoid(11))
+  name        String
+  phone       String       @unique
+  enabled     Boolean      @default(true)
+  preScript   String?
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  funnels     Funnel[]
+  testers     Tester[]
+  scriptLinks ScriptLink[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([userId, name])
+}
+
+model ScriptLink {
+  name                String
+  sourceScriptId      String
+  sourceScript        Script                @relation(fields: [sourceScriptId], references: [id])
+  automationId        String
+  automation          Automation            @relation(fields: [automationId], references: [id])
+  autoUpdate          Boolean               @default(false)
+  stages              Stage[]
+  releases            ScriptRelease[]
+  funnels             Funnel[]
+  createdAt           DateTime              @default(now())
+  deletedAt           DateTime?
+  WebhookSubscription WebhookSubscription[]
+
+  @@id([sourceScriptId, automationId])
+  @@unique([automationId, name])
+}
+
+model ScriptRelease {
+  scriptId     String
+  automationId String
+  scriptLink   ScriptLink   @relation(fields: [scriptId, automationId], references: [sourceScriptId, automationId])
+  version      Int
+  update       Int
+  scriptUpdate ScriptUpdate @relation(fields: [scriptId, version, update], references: [scriptId, version, update])
+  updatedAt    DateTime     @updatedAt
+
+  @@id([scriptId, automationId, version])
+  @@unique([scriptId, automationId, version, update])
+}
+
+model Safevar {
+  id        String   @id @default(nanoid(11))
+  name      String
+  value     String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, userId])
+}
+
+model WebhookSubscription {
+  scriptId      String
+  automationId  String
+  scriptLink    ScriptLink @relation(fields: [scriptId, automationId], references: [sourceScriptId, automationId])
+  key           String
+  validationExp String?
+
+  @@id([scriptId, automationId, key])
+}
+
+model ScriptPermission {
+  scriptId  String
+  script    Script                @relation(fields: [scriptId], references: [id])
+  userId    String
+  user      User                  @relation(fields: [userId], references: [id])
+  level     ScriptPermissionLevel @default(VIEW_FLOW)
+  createdAt DateTime              @default(now())
+
+  @@id([scriptId, userId])
+}
+
+enum ScriptPermissionLevel {
+  EDIT_CODE
+  EDIT_FLOW
+  VIEW_FLOW
+  EXECUTION
+}
+
+model Script {
+  id               String             @id @default(nanoid(11))
+  name             String
+  repoFileName     String
+  private          Boolean            @default(true)
+  authorId         String
+  author           User               @relation("UserScripts", fields: [authorId], references: [id])
+  permissions      ScriptPermission[]
+  versions         ScriptVersion[]
+  scriptLinks      ScriptLink[]
+  originalScriptId String?
+  originalScript   Script?            @relation("ScriptCopies", fields: [originalScriptId], references: [id])
+  scriptCopies     Script[]           @relation("ScriptCopies")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([name, authorId])
+}
+
+model ScriptVersion {
+  scriptId          String
+  script            Script         @relation(fields: [scriptId], references: [id])
+  version           Int
+  unpublished       Boolean        @default(true)
+  deprecatedWarning String?
+  draftContent      String
+  draftParamSchema  Json?
+  updates           ScriptUpdate[]
+  createdAt         DateTime       @default(now())
+
+  @@id([scriptId, version])
+}
+
+model ScriptUpdate {
+  scriptHash     String          @unique
+  scriptId       String
+  version        Int
+  update         Int
+  scriptVersion  ScriptVersion   @relation(fields: [scriptId, version], references: [scriptId, version])
+  scriptReleases ScriptRelease[]
+  message        String
+  createdAt      DateTime        @default(now())
+
+  @@id([scriptId, version, update])
+}
+
+model Tester {
+  phone        String
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id])
+  createdAt    DateTime   @default(now())
+
+  @@id([phone, automationId])
+}
+
+model Stage {
+  name         String
+  scriptId     String
+  automationId String
+  scriptLink   ScriptLink @relation(fields: [scriptId, automationId], references: [sourceScriptId, automationId])
+
+  @@id([scriptId, automationId, name])
+}
+
+model StageMetadata {
+  funnelId  String
+  funnel    Funnel @relation(fields: [funnelId], references: [id])
+  stageName String
+  metadata  Json
+
+  @@id([funnelId, stageName])
+}
+
+model Message {
+  id        String       @id
+  funnelId  String
+  funnel    Funnel       @relation(fields: [funnelId], references: [id])
+  agentId   String
+  agentType MessageAgent
+  stageName String
+  date      DateTime
+  type      MessageType
+  processed Boolean      @default(false)
+  quoteId   String?
+  content   Json?
+  metadata  Json?
+}
+
+enum MessageAgent {
+  LEAD
+  AUTOMATION
+  ASSISTANT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  LOCATION
+  CONTACT
+  STICKER
+  UNKNOWN
+}
+
+enum Genre {
+  MASCULINO
+  FEMININO
+}

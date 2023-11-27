@@ -1,0 +1,7 @@
+# API REQUEST:
+{{additional_instructions}}
+```json
+{{input}}
+```
+
+## Answer only with the JSON markdown block and include the enclosing markdown codeblock, no further explanation or additional comments needed in the answer.

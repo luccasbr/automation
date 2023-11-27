@@ -1,0 +1,9 @@
+## Example{{prefix}} {{number}}:
+- Input:
+  ```json
+  {{input}}
+  ```
+- Output:
+  ```json
+  {{output}}
+  ```
